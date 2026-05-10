@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph Server</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div id="controls">
+    <h1>Graph Server</h1>
+    <button id="btn-seed">Seed Sample Data</button>
+    <button id="btn-reload">Reload Graph</button>
+    <div class="toggles">
+      <div class="toggle-row">
+        <label><input type="checkbox" id="toggle-directories" checked> Directories</label>
+        <label class="edge-toggle"><input type="checkbox" id="toggle-dir-edges" checked> edges</label>
+      </div>
+      <div class="toggle-row">
+        <label><input type="checkbox" id="toggle-objects" checked> Object files</label>
+        <label class="edge-toggle"><input type="checkbox" id="toggle-obj-edges" checked> edges</label>
+      </div>
+      <div class="toggle-row">
+        <label><input type="checkbox" id="toggle-symbols" checked> Symbols</label>
+        <label class="edge-toggle"><input type="checkbox" id="toggle-sym-edges" checked> edges</label>
+      </div>
+    </div>
+    <div id="tree-section">
+      <div class="tree-toolbar">
+        <span class="section-label">Nodes</span>
+        <button id="btn-select-all" class="tree-btn">All</button>
+        <button id="btn-deselect-all" class="tree-btn">None</button>
+      </div>
+      <div id="tree-root"></div>
+    </div>
+    <div class="legend">
+      <p class="legend-title">Edges</p>
+      <div class="legend-item"><span class="legend-swatch" style="background:#59a14f"></span>Contains</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#76b7b2"></span>Defines</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#f28e2b"></span>References</div>
+    </div>
+    <p id="status-msg"></p>
+  </div>
+
+  <div id="info-panel" class="hidden">
+    <button id="info-close">&#215;</button>
+    <h3 id="info-title">Node</h3>
+    <dl id="info-body"></dl>
+  </div>
+
+  <div id="graph-container"></div>
+  <canvas id="hull-layer"></canvas>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "graphology": "https://esm.sh/graphology@0.25.4",
+      "graphology-layout/random": "https://esm.sh/graphology-layout@0.6.1/random",
+      "graphology-layout-forceatlas2": "https://esm.sh/graphology-layout-forceatlas2@0.10.1",
+      "sigma": "https://esm.sh/sigma@3.0.0"
+    }
+  }
+  </script>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
