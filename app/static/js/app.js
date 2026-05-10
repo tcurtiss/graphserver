@@ -284,6 +284,7 @@ function assignPositions(g) {
 // ---------------------------------------------------------------------------
 
 function buildTreePanel() {
+  document.getElementById("tree-search").value = "";
   const root = document.getElementById("tree-root");
   root.innerHTML = "";
 
@@ -298,6 +299,125 @@ function buildTreePanel() {
       .sort((a, b) => name(a).localeCompare(name(b)));
     root.appendChild(makeDirItem(dirNode, objs, name));
   });
+}
+
+function buildFilteredTree(query) {
+  const root = document.getElementById("tree-root");
+  root.innerHTML = "";
+  const q = query.toLowerCase();
+  const nameOf = n => fullGraph.getNodeAttribute(n, "name");
+  let found = 0;
+
+  fullGraph.nodes()
+    .filter(n => fullGraph.getNodeAttribute(n, "nodeLabel") === "Directory")
+    .sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+    .forEach(dirNode => {
+      const dirName = nameOf(dirNode);
+      const dirMatch = dirName.toLowerCase().includes(q);
+      const allObjs = (_dirObjs[dirNode] ?? []).slice()
+        .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+
+      // Each obj entry: the obj itself + which syms to show
+      const objEntries = allObjs.flatMap(objNode => {
+        const objMatch = dirMatch || nameOf(objNode).toLowerCase().includes(q);
+        const syms = (objMatch
+          ? (_objSymbols[objNode] ?? [])
+          : (_objSymbols[objNode] ?? []).filter(s => nameOf(s).toLowerCase().includes(q))
+        ).slice().sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+        return (objMatch || syms.length) ? [{ objNode, syms }] : [];
+      });
+
+      if (!dirMatch && !objEntries.length) return;
+      found++;
+
+      const dirWrap = document.createElement("div");
+
+      // Dir row
+      const dirRow = document.createElement("div");
+      dirRow.className = "tree-row";
+      const dirArrow = document.createElement("span");
+      dirArrow.className = "tree-arrow";
+      dirArrow.textContent = "▼";
+      const dirCb = document.createElement("input");
+      dirCb.type = "checkbox";
+      dirCb.checked = !hiddenNodes.has(dirNode);
+      const dirLbl = document.createElement("span");
+      dirLbl.className = "tree-label";
+      dirLbl.textContent = dirName;
+      const dirCnt = document.createElement("span");
+      dirCnt.className = "tree-count";
+      dirCnt.textContent = objEntries.length;
+      dirRow.append(dirArrow, dirCb, dirLbl, dirCnt);
+      dirWrap.appendChild(dirRow);
+
+      // Obj children (always expanded in filtered view)
+      const dirChildren = document.createElement("div");
+      dirChildren.className = "tree-children";
+
+      objEntries.forEach(({ objNode, syms }) => {
+        const objWrap = document.createElement("div");
+        const objRow = document.createElement("div");
+        objRow.className = "tree-row";
+        const objArrow = document.createElement("span");
+        objArrow.className = "tree-arrow";
+        objArrow.textContent = syms.length ? "▼" : "";
+        const objCb = document.createElement("input");
+        objCb.type = "checkbox";
+        objCb.checked = !hiddenNodes.has(objNode);
+        const objLbl = document.createElement("span");
+        objLbl.className = "tree-label";
+        objLbl.textContent = nameOf(objNode);
+        const objCnt = document.createElement("span");
+        objCnt.className = "tree-count";
+        objCnt.textContent = syms.length || (_objSymCount[objNode] ?? 0);
+        objRow.append(objArrow, objCb, objLbl, objCnt);
+        objWrap.appendChild(objRow);
+
+        if (syms.length) {
+          const symChildren = document.createElement("div");
+          symChildren.className = "tree-children";
+          syms.forEach(s => symChildren.appendChild(makeSymItem(s)));
+          objWrap.appendChild(symChildren);
+        }
+
+        objCb.addEventListener("change", () => {
+          if (objCb.checked) {
+            hiddenNodes.delete(objNode);
+            (_objSymbols[objNode] ?? []).forEach(s => hiddenNodes.delete(s));
+          } else {
+            hiddenNodes.add(objNode);
+          }
+          objWrap.querySelectorAll("input[type=checkbox]").forEach(c => { c.checked = objCb.checked; });
+          applyView();
+        });
+
+        dirChildren.appendChild(objWrap);
+      });
+
+      dirCb.addEventListener("change", () => {
+        if (dirCb.checked) {
+          hiddenNodes.delete(dirNode);
+          allObjs.forEach(o => {
+            hiddenNodes.delete(o);
+            (_objSymbols[o] ?? []).forEach(s => hiddenNodes.delete(s));
+          });
+        } else {
+          hiddenNodes.add(dirNode);
+        }
+        dirChildren.querySelectorAll("input[type=checkbox]").forEach(c => { c.checked = dirCb.checked; });
+        applyView();
+      });
+
+      dirWrap.appendChild(dirChildren);
+      root.appendChild(dirWrap);
+    });
+
+  if (!found) {
+    const p = document.createElement("p");
+    p.style.cssText = "font-size:0.8rem;color:#555;padding:6px 0;text-align:center";
+    p.textContent = "No matches";
+    root.appendChild(p);
+  }
 }
 
 function makeDirItem(dirNode, objs, name) {
@@ -693,6 +813,15 @@ document.getElementById("btn-seed").addEventListener("click", async () => {
 
 document.getElementById("btn-reload").addEventListener("click", loadGraph);
 document.getElementById("info-close").addEventListener("click", hideInfoPanel);
+
+let _searchTimer = null;
+document.getElementById("tree-search").addEventListener("input", e => {
+  clearTimeout(_searchTimer);
+  const q = e.target.value.trim();
+  _searchTimer = setTimeout(() => {
+    q ? buildFilteredTree(q) : buildTreePanel();
+  }, 200);
+});
 
 document.getElementById("btn-select-all").addEventListener("click", () => {
   hiddenNodes.clear();

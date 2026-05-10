@@ -163,6 +163,22 @@ body {
   color: #fff;
 }
 
+#tree-search {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: #eee;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+#tree-search::placeholder { color: #555; }
+#tree-search:focus { border-color: rgba(255,255,255,0.35); }
+
 #tree-root {
   max-height: 40vh;
   overflow-y: auto;
