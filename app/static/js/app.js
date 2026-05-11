@@ -21,8 +21,10 @@ let _objToDir    = {}; // obj node id   → dir node id
 let _dirObjs     = {}; // dir node id   → [obj node ids]
 let _objSymCount = {}; // obj node id   → symbol count
 let _objSymbols  = {}; // obj node id   → [sym node ids]
+let _unrefSymbols = new Set(); // sym node IDs with no incoming REFERENCES edge
 
 let hiddenNodes = new Set(); // individually hidden node IDs (tree toggles)
+let hideUnrefSymbols = false;
 
 // Symbol-click highlight state
 let _highlightRefNodes = new Set(); // obj node IDs in active highlight
@@ -145,6 +147,15 @@ function buildMappings(fg) {
       (_objSymbols[obj] ??= []).push(sym);
     }
   });
+
+  // Compute unreferenced symbols: all Function/Data nodes with no incoming REFERENCES
+  _unrefSymbols = new Set(
+    fg.nodes().filter(n => { const l = nl(n); return l === "Function" || l === "Data"; })
+  );
+  fg.edges().forEach(edge => {
+    if (fg.getEdgeAttribute(edge, "label") === "REFERENCES")
+      _unrefSymbols.delete(fg.target(edge));
+  });
 }
 
 // Returns true if this node is hidden via a tree toggle (cascades to children)
@@ -176,6 +187,7 @@ function visibleAncestor(nodeId) {
     return dir ? visibleAncestor(dir) : null;
   }
   if (nl === "Function" || nl === "Data") {
+    if (hideUnrefSymbols && _unrefSymbols.has(nodeId)) return null;
     if (showSymbols) return nodeId;
     const obj = _objByName[fullGraph.getNodeAttribute(nodeId, "defined_in")];
     return obj ? visibleAncestor(obj) : null;
@@ -948,6 +960,11 @@ document.getElementById("toggle-directories").addEventListener("change", e => {
 
 document.getElementById("toggle-obj-edges").addEventListener("change", e => {
   showObjEdges = e.target.checked;
+  applyView();
+});
+
+document.getElementById("toggle-hide-unref").addEventListener("change", e => {
+  hideUnrefSymbols = e.target.checked;
   applyView();
 });
 
