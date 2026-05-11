@@ -14,7 +14,6 @@
     <div class="toggles">
       <div class="toggle-row">
         <label><input type="checkbox" id="toggle-directories" checked> Directories</label>
-        <label class="edge-toggle"><input type="checkbox" id="toggle-dir-edges" checked> edges</label>
       </div>
       <div class="toggle-row">
         <label><input type="checkbox" id="toggle-objects" checked> Object files</label>
@@ -22,7 +21,6 @@
       </div>
       <div class="toggle-row">
         <label><input type="checkbox" id="toggle-symbols" checked> Symbols</label>
-        <label class="edge-toggle"><input type="checkbox" id="toggle-sym-edges" checked> edges</label>
       </div>
     </div>
     <div id="tree-section">
@@ -36,9 +34,7 @@
     </div>
     <div class="legend">
       <p class="legend-title">Edges</p>
-      <div class="legend-item"><span class="legend-swatch" style="background:#59a14f"></span>Contains</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#76b7b2"></span>Defines</div>
-      <div class="legend-item"><span class="legend-swatch" style="background:#f28e2b"></span>References</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#f28e2b"></span>References (obj → function)</div>
     </div>
     <p id="status-msg"></p>
   </div>

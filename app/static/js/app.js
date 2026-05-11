@@ -12,9 +12,7 @@ let fullGraph      = null; // complete graph, always fully laid out
 let showDirectories = true;
 let showObjects     = true;
 let showSymbols     = true;
-let showDirEdges    = true; // CONTAINS edges  (dir → obj)
-let showObjEdges    = true; // REFERENCES edges (obj → sym, cross-obj deps)
-let showSymEdges    = true; // DEFINES edges    (obj → sym, symbol ownership)
+let showObjEdges    = true; // REFERENCES edges (obj → function, cross-obj deps)
 let _resizeHandler = null;
 
 // Pre-computed containment maps derived from fullGraph
@@ -25,6 +23,14 @@ let _objSymCount = {}; // obj node id   → symbol count
 let _objSymbols  = {}; // obj node id   → [sym node ids]
 
 let hiddenNodes = new Set(); // individually hidden node IDs (tree toggles)
+
+// Symbol-click highlight state
+let _highlightRefNodes = new Set(); // obj node IDs in active highlight
+let _tempNodeIds       = [];        // node IDs injected into view graph temporarily
+let _tempEdgeIds       = [];        // edge IDs injected into view graph temporarily
+let _highlightedSym    = null;      // currently highlighted symbol node ID
+let _activeNodeReducer = null;      // persists across hover so leaveNode can restore
+let _activeEdgeReducer = null;
 
 const EDGE_COLORS = {
   CONTAINS:   "#59a14f",  // green  — containment hierarchy
@@ -90,6 +96,14 @@ function applyView() {
   if (!fullGraph) return;
 
   const viewGraph = buildViewGraph();
+
+  // Reset highlight state — the old renderer/graph is being replaced
+  _highlightRefNodes = new Set();
+  _tempNodeIds = [];
+  _tempEdgeIds = [];
+  _highlightedSym = null;
+  _activeNodeReducer = null;
+  _activeEdgeReducer = null;
 
   if (renderer) { renderer.kill(); renderer = null; }
 
@@ -182,9 +196,8 @@ function buildViewGraph() {
   const edgeData = new Map(); // key → { src, tgt, count, label }
   fullGraph.edges().forEach(edge => {
     const label = fullGraph.getEdgeAttribute(edge, "label");
-    if (label === "CONTAINS"   && !showDirEdges) return;
-    if (label === "REFERENCES" && !showObjEdges) return;
-    if (label === "DEFINES"    && !showSymEdges) return;
+    if (label !== "REFERENCES") return;
+    if (!showObjEdges) return;
     const src = visibleAncestor(fullGraph.source(edge));
     const tgt = visibleAncestor(fullGraph.target(edge));
     if (!src || !tgt || src === tgt) return;
@@ -754,11 +767,18 @@ function attachInteractivity(r, g) {
   });
 
   r.on("leaveNode", () => {
-    r.setSetting("nodeReducer", null);
-    r.setSetting("edgeReducer", null);
+    // Restore click-highlight reducers (or null if no active highlight)
+    r.setSetting("nodeReducer", _activeNodeReducer);
+    r.setSetting("edgeReducer", _activeEdgeReducer);
   });
 
   r.on("clickNode", ({ node }) => {
+    const nl = fullGraph?.getNodeAttribute(node, "nodeLabel");
+    if (nl === "Function" || nl === "Data") {
+      highlightSymbolRefs(node);
+    } else {
+      clearSymbolHighlight();
+    }
     fetch(`${API}/node/${encodeURIComponent(node)}`)
       .then(res => res.json())
       .then(data => showInfoPanel(node, data))
@@ -778,6 +798,24 @@ function showInfoPanel(nodeId, data) {
   dl.innerHTML = "";
   appendDlRow(dl, "Labels", data.labels.join(", "));
   for (const [k, v] of Object.entries(data.properties ?? {})) appendDlRow(dl, k, v);
+
+  if (fullGraph && (data.labels.includes("Function") || data.labels.includes("Data"))) {
+    const refs = [];
+    fullGraph.edges().forEach(e => {
+      if (fullGraph.getEdgeAttribute(e, "label") === "REFERENCES" &&
+          fullGraph.target(e) === nodeId) {
+        refs.push(fullGraph.getNodeAttribute(fullGraph.source(e), "name"));
+      }
+    });
+    if (refs.length) {
+      refs.sort();
+      const MAX = 30;
+      const text = refs.slice(0, MAX).join(", ") +
+        (refs.length > MAX ? `, … +${refs.length - MAX} more` : "");
+      appendDlRow(dl, `Referenced by (${refs.length})`, text);
+    }
+  }
+
   document.getElementById("info-panel").classList.remove("hidden");
 }
 
@@ -787,7 +825,65 @@ function appendDlRow(dl, key, value) {
   dl.appendChild(dt); dl.appendChild(dd);
 }
 
+function highlightSymbolRefs(symNodeId) {
+  clearSymbolHighlight();
+  if (!renderer || !fullGraph) return;
+  const vg = renderer.getGraph();
+  if (!vg.hasNode(symNodeId)) return;
+
+  _highlightedSym = symNodeId;
+
+  fullGraph.edges().forEach(e => {
+    if (fullGraph.getEdgeAttribute(e, "label") !== "REFERENCES") return;
+    if (fullGraph.target(e) !== symNodeId) return;
+    const objId = fullGraph.source(e);
+    _highlightRefNodes.add(objId);
+    if (!vg.hasNode(objId)) {
+      vg.addNode(objId, { ...fullGraph.getNodeAttributes(objId) });
+      _tempNodeIds.push(objId);
+    }
+    const eid = vg.addEdge(objId, symNodeId, {
+      label: "REFERENCES",
+      color: EDGE_COLORS.REFERENCES,
+      size: 2.5,
+    });
+    _tempEdgeIds.push(eid);
+  });
+
+  const tempEdgeSet = new Set(_tempEdgeIds);
+
+  _activeNodeReducer = (n, attrs) => {
+    if (n === symNodeId) return { ...attrs, highlighted: true, size: (attrs.size || 5) * 1.5 };
+    if (_highlightRefNodes.has(n)) return { ...attrs, highlighted: true };
+    return { ...attrs, color: "#333" };
+  };
+  _activeEdgeReducer = (edge, attrs) =>
+    tempEdgeSet.has(edge)
+      ? { ...attrs, color: EDGE_COLORS.REFERENCES, size: 2.5 }
+      : { ...attrs, color: "#222" };
+
+  renderer.setSetting("nodeReducer", _activeNodeReducer);
+  renderer.setSetting("edgeReducer", _activeEdgeReducer);
+}
+
+function clearSymbolHighlight() {
+  if (renderer) {
+    const vg = renderer.getGraph();
+    _tempEdgeIds.forEach(eid => { try { vg.dropEdge(eid); } catch (_) {} });
+    _tempNodeIds.forEach(nid => { try { vg.dropNode(nid); } catch (_) {} });
+    renderer.setSetting("nodeReducer", null);
+    renderer.setSetting("edgeReducer", null);
+  }
+  _highlightRefNodes = new Set();
+  _tempNodeIds       = [];
+  _tempEdgeIds       = [];
+  _highlightedSym    = null;
+  _activeNodeReducer = null;
+  _activeEdgeReducer = null;
+}
+
 function hideInfoPanel() {
+  clearSymbolHighlight();
   document.getElementById("info-panel").classList.add("hidden");
 }
 
@@ -850,18 +946,8 @@ document.getElementById("toggle-directories").addEventListener("change", e => {
   applyView();
 });
 
-document.getElementById("toggle-dir-edges").addEventListener("change", e => {
-  showDirEdges = e.target.checked;
-  applyView();
-});
-
 document.getElementById("toggle-obj-edges").addEventListener("change", e => {
   showObjEdges = e.target.checked;
-  applyView();
-});
-
-document.getElementById("toggle-sym-edges").addEventListener("change", e => {
-  showSymEdges = e.target.checked;
   applyView();
 });
 
